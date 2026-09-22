@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SAP Position — Hiring Manager Form</title>
+
+<!-- Leaflet (OpenStreetMap) — no API key required -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+  :root {
+    --primary: #0a6ed1;      /* SAP Fiori blue */
+    --primary-dark: #0854a0;
+    --bg: #f5f6f7;
+    --card: #ffffff;
+    --border: #d9d9d9;
+    --text: #32363a;
+    --muted: #6a6d70;
+    --success: #107e3e;
+    --warn: #e9730c;
+    --error: #bb0000;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    background: var(--primary);
+    color: #fff;
+    padding: 20px 24px;
+  }
+  header h1 { margin: 0; font-size: 22px; font-weight: 600; }
+  header p { margin: 4px 0 0; opacity: 0.9; font-size: 14px; }
+
+  .container {
+    max-width: 860px;
+    margin: 24px auto 60px;
+    padding: 0 16px;
+  }
+  fieldset {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    margin: 0 0 20px;
+  }
+  legend {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--primary-dark);
+    padding: 0 8px;
+  }
+  .row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  .row .full { grid-column: 1 / -1; }
+  @media (max-width: 640px) { .row { grid-template-columns: 1fr; } }
+
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin: 10px 0 4px;
+  }
+  label .req { color: var(--error); }
+  input, select, textarea {
+    width: 100%;
+    padding: 9px 10px;
+    font-size: 14px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--text);
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: 2px solid var(--primary);
+    border-color: var(--primary);
+  }
+  textarea { resize: vertical; min-height: 70px; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+  /* Location picker (from exact_location_delivery_feature.md, section 6) */
+  .loc-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    margin-bottom: 12px;
+  }
+  .loc-btn:hover { background: var(--primary-dark); }
+  .loc-btn:disabled { background: #9bb9d4; cursor: wait; }
+
+  #map {
+    height: 320px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 12px;
+  }
+  .status {
+    font-size: 13px;
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    display: none;
+  }
+  .status.show { display: block; }
+  .status.info    { background: #e6f2fb; color: var(--primary-dark); }
+  .status.success { background: #e9f5ec; color: var(--success); }
+  .status.warn    { background: #fdf0e2; color: var(--warn); }
+  .status.error   { background: #fbeaea; color: var(--error); }
+
+  .coords {
+    font-size: 12px;
+    color: var(--muted);
+    font-family: Consolas, monospace;
+    margin-bottom: 8px;
+  }
+
+  .actions { text-align: right; }
+  .submit-btn {
+    background: var(--success);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 12px 28px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .submit-btn:hover { filter: brightness(1.08); }
+
+  #output {
+    display: none;
+    background: #1e1e1e;
+    color: #d4f0d4;
+    border-radius: 8px;
+    padding: 16px;
+    font-family: Consolas, monospace;
+    font-size: 12.5px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin-top: 20px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Hiring Requisition — SAP Consultant</h1>
+  <p>Hiring manager form: position details, candidate profile, and interview location</p>
+</header>
+
+<div class="container">
+<form id="hiringForm" novalidate>
+
+  <!-- ── 1. Hiring manager ─────────────────────────────── -->
+  <fieldset>
+    <legend>1. Hiring Manager</legend>
+    <div class="row">
+      <div>
+        <label>Full name <span class="req">*</span></label>
+        <input type="text" name="managerName" required placeholder="e.g. Priya Sharma" />
+      </div>
+      <div>
+        <label>Work email <span class="req">*</span></label>
+        <input type="email" name="managerEmail" required placeholder="priya.sharma@company.com" />
+      </div>
+      <div>
+        <label>Department</label>
+        <input type="text" name="managerDept" placeholder="e.g. Enterprise Applications" />
+      </div>
+      <div>
+        <label>Phone</label>
+        <input type="tel" name="managerPhone" placeholder="+91 98XXXXXXXX" />
+      </div>
+    </div>
+  </fieldset>
+
+  <!-- ── 2. Position details ───────────────────────────── -->
+  <fieldset>
+    <legend>2. SAP Position Details</legend>
+    <div class="row">
+      <div>
+        <label>Job title <span class="req">*</span></label>
+        <input type="text" name="jobTitle" required value="SAP Consultant" />
+      </div>
+      <div>
+        <label>SAP module <span class="req">*</span></label>
+        <select name="sapModule" required>
+          <option value="">— Select module —</option>
+          <option>SAP FICO (Finance &amp; Controlling)</option>
+          <option>SAP MM (Materials Management)</option>
+          <option>SAP SD (Sales &amp; Distribution)</option>
+          <option>SAP HCM / SuccessFactors</option>
+          <option>SAP ABAP (Development)</option>
+          <option>SAP BASIS (Administration)</option>
+          <option>SAP S/4HANA</option>
+          <option>SAP PP (Production Planning)</option>
+          <option>SAP BTP (Business Technology Platform)</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div>
+        <label>Experience required (years) <span class="req">*</span></label>
+        <select name="experience" required>
+          <option value="">— Select —</option>
+          <option>0 – 2</option>
+          <option>2 – 5</option>
+          <option>5 – 8</option>
+          <option>8 – 12</option>
+          <option>12+</option>
+        </select>
+      </div>
+      <div>
+        <label>Employment type</label>
+        <select name="employmentType">
+          <option>Full-time</option>
+          <option>Contract</option>
+          <option>Contract-to-hire</option>
+          <option>Part-time</option>
+        </select>
+      </div>
+      <div>
+        <label>Work mode</label>
+        <select name="workMode" id="workMode">
+          <option>On-site</option>
+          <option>Hybrid</option>
+          <option>Remote</option>
+        </select>
+      </div>
+      <div>
+        <label>Number of openings</label>
+        <input type="number" name="openings" min="1" value="1" />
+      </div>
+      <div>
+        <label>Budget / CTC range (LPA)</label>
+        <input type="text" name="budget" placeholder="e.g. 15 – 25" />
+      </div>
+      <div>
+        <label>Target start date</label>
+        <input type="date" name="startDate" />
+      </div>
+      <div class="full">
+        <label>Key skills / certifications required</label>
+        <textarea name="skills" placeholder="e.g. S/4HANA migration, ABAP on HANA, SAP Activate, Fiori, 2+ end-to-end implementations"></textarea>
+      </div>
+    </div>
+  </fieldset>
+
+  <!-- ── 3. Candidate (optional) ───────────────────────── -->
+  <fieldset>
+    <legend>3. Candidate Being Processed (optional)</legend>
+    <div class="row">
+      <div>
+        <label>Candidate name</label>
+        <input type="text" name="candidateName" placeholder="Leave blank if requisition only" />
+      </div>
+      <div>
+        <label>Candidate email</label>
+        <input type="email" name="candidateEmail" />
+      </div>
+      <div>
+        <label>Current company</label>
+        <input type="text" name="candidateCompany" />
+      </div>
+      <div>
+        <label>Notice period</label>
+        <select name="noticePeriod">
+          <option value="">— Select —</option>
+          <option>Immediate</option>
+          <option>15 days</option>
+          <option>30 days</option>
+          <option>60 days</option>
+          <option>90 days</option>
+        </select>
+      </div>
+      <div class="full">
+        <label>Interview stage / notes</label>
+        <textarea name="candidateNotes" placeholder="e.g. Cleared L1 technical round; schedule L2 with SAP practice lead"></textarea>
+      </div>
+    </div>
+  </fieldset>
+
+  <!-- ── 4. Office / interview location ─────────────────
+       Implements the flow from exact_location_delivery_feature.md:
+       GPS → reverse geocoding → map + draggable pin → editable
+       address + landmark → confirm.                          -->
+  <fieldset>
+    <legend>4. Office / Interview Location</legend>
+
+    <button type="button" class="loc-btn" id="useLocationBtn">
+      📍 Use my current location
+    </button>
+
+    <div class="status" id="locStatus"></div>
+
+    <div id="map"></div>
+    <div class="hint" style="margin:-6px 0 10px;">
+      Drag the pin to the exact office entrance. The confirmed pin position is
+      saved — not just the detected GPS position.
+    </div>
+    <div class="coords" id="coordsDisplay">No location captured yet.</div>
+
+    <div class="row">
+      <div class="full">
+        <label>Address line 1 <span class="req">*</span></label>
+        <input type="text" name="addressLine1" id="addressLine1" required placeholder="Building / street" />
+      </div>
+      <div class="full">
+        <label>Address line 2</label>
+        <input type="text" name="addressLine2" id="addressLine2" placeholder="Area / road" />
+      </div>
+      <div>
+        <label>Office / floor / suite no.</label>
+        <input type="text" name="unitNumber" placeholder="e.g. Tower B, 4th Floor" />
+      </div>
+      <div>
+        <label>Landmark</label>
+        <input type="text" name="landmark" id="landmark" placeholder="e.g. Near Metro Station" />
+      </div>
+      <div>
+        <label>City <span class="req">*</span></label>
+        <input type="text" name="city" id="city" required />
+      </div>
+      <div>
+        <label>State</label>
+        <input type="text" name="state" id="state" />
+      </div>
+      <div>
+        <label>Postal code</label>
+        <input type="text" name="postalCode" id="postalCode" />
+      </div>
+      <div>
+        <label>Country</label>
+        <input type="text" name="country" id="country" />
+      </div>
+    </div>
+  </fieldset>
+
+  <div class="actions">
+    <button type="submit" class="submit-btn">Confirm &amp; Submit Requisition</button>
+  </div>
+
+  <pre id="output"></pre>
+</form>
+</div>
+
+<script>
+/* =====================================================================
+   Location picker — implements exact_location_delivery_feature.md:
+   1. "Use my current location"  → browser Geolocation API (section 3)
+   2. Reverse geocoding           → OpenStreetMap Nominatim (section 5)
+   3. Map + draggable pin         → Leaflet (sections 6 & 7)
+   4. Detected vs confirmed location kept separately (section 17)
+   5. Edge cases: denied / unavailable / low accuracy (section 16)
+   ===================================================================== */
+
+const DEFAULT_CENTER = [12.9716, 77.5946]; // Bengaluru fallback
+const LOW_ACCURACY_M = 100;
+
+let detectedLocation = null;   // { latitude, longitude, accuracyMeters }
+let confirmedLocation = null;  // { latitude, longitude } — follows the pin
+
+// --- Map setup -------------------------------------------------------
+const map = L.map('map').setView(DEFAULT_CENTER, 12);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19,
+  attribution: '&copy; OpenStreetMap contributors'
+}).addTo(map);
+
+const marker = L.marker(DEFAULT_CENTER, { draggable: true }).addTo(map);
+
+marker.on('dragend', () => {
+  const p = marker.getLatLng();
+  confirmedLocation = { latitude: +p.lat.toFixed(7), longitude: +p.lng.toFixed(7) };
+  updateCoordsDisplay();
+  setStatus('info', 'Pin moved. Reverse-geocoding the new position…');
+  reverseGeocode(p.lat, p.lng);
+});
+
+// --- Status helpers --------------------------------------------------
+const statusEl = document.getElementById('locStatus');
+function setStatus(type, msg) {
+  statusEl.className = 'status show ' + type;
+  statusEl.textContent = msg;
+}
+
+function updateCoordsDisplay() {
+  const el = document.getElementById('coordsDisplay');
+  if (!confirmedLocation) { el.textContent = 'No location captured yet.'; return; }
+  let txt = `Confirmed pin: ${confirmedLocation.latitude}, ${confirmedLocation.longitude}`;
+  if (detectedLocation) {
+    txt += `  |  Detected (GPS): ${detectedLocation.latitude}, ${detectedLocation.longitude}` +
+           ` (±${detectedLocation.accuracyMeters} m)`;
+  }
+  el.textContent = txt;
+}
+
+// --- 1. Geolocation (md section 3) -----------------------------------
+const useBtn = document.getElementById('useLocationBtn');
+
+function requestLocation() {
+  if (!navigator.geolocation) {
+    setStatus('error', 'Geolocation is not supported by this browser. Please enter the address manually.');
+    return;
+  }
+  useBtn.disabled = true;
+  setStatus('info', 'Requesting location permission…');
+
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      useBtn.disabled = false;
+      const latitude  = position.coords.latitude;
+      const longitude = position.coords.longitude;
+      const accuracy  = Math.round(position.coords.accuracy);
+
+      detectedLocation  = { latitude: +latitude.toFixed(7), longitude: +longitude.toFixed(7), accuracyMeters: accuracy };
+      confirmedLocation = { latitude: detectedLocation.latitude, longitude: detectedLocation.longitude };
+
+      map.setView([latitude, longitude], 17);
+      marker.setLatLng([latitude, longitude]);
+      updateCoordsDisplay();
+
+      // Low-accuracy edge case (md section 16)
+      if (accuracy > LOW_ACCURACY_M) {
+        setStatus('warn', `Location accuracy is low (±${accuracy} m). Please drag the pin to the exact office location.`);
+      } else {
+        setStatus('success', `Location detected (±${accuracy} m). Fetching address…`);
+      }
+      reverseGeocode(latitude, longitude);
+    },
+    (error) => {
+      useBtn.disabled = false;
+      // Permission denied / unavailable edge cases (md section 16)
+      if (error.code === error.PERMISSION_DENIED) {
+        setStatus('error', "We couldn't access your location. Please enable location permission or enter the address manually.");
+      } else if (error.code === error.POSITION_UNAVAILABLE) {
+        setStatus('error', 'GPS unavailable. Please enter the address manually or drop the pin on the map.');
+      } else {
+        setStatus('error', 'Location request timed out. Try again or enter the address manually.');
+      }
+    },
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+  );
+}
+
+useBtn.addEventListener('click', requestLocation);
+
+// Ask for location as soon as the page opens
+window.addEventListener('load', requestLocation);
+
+// --- 2. Reverse geocoding via Nominatim (md section 5) ----------------
+async function reverseGeocode(lat, lon) {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&addressdetails=1`;
+    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) throw new Error('Geocoder returned ' + res.status);
+    const data = await res.json();
+    const a = data.address || {};
+
+    document.getElementById('addressLine1').value =
+      [a.house_number, a.building, a.road].filter(Boolean).join(', ') || (data.name || '');
+    document.getElementById('addressLine2').value =
+      [a.neighbourhood, a.suburb].filter(Boolean).join(', ');
+    document.getElementById('city').value =
+      a.city || a.town || a.village || a.county || '';
+    document.getElementById('state').value = a.state || '';
+    document.getElementById('postalCode').value = a.postcode || '';
+    document.getElementById('country').value = a.country || '';
+
+    setStatus('success', 'Address filled from map position. Verify it, adjust the pin if needed, and add floor/landmark details.');
+  } catch (e) {
+    setStatus('warn', 'Could not fetch the address automatically. Please fill the address fields manually.');
+  }
+}
+
+// --- 3. Submit — build payload like md sections 9 & 17 -----------------
+document.getElementById('hiringForm').addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  const form = ev.target;
+
+  if (!form.reportValidity()) return;
+
+  const f = new FormData(form);
+  const payload = {
+    requisitionId: 'REQ-SAP-' + Date.now().toString().slice(-6),
+    submittedAt: new Date().toISOString(),
+    hiringManager: {
+      name: f.get('managerName'),
+      email: f.get('managerEmail'),
+      department: f.get('managerDept'),
+      phone: f.get('managerPhone')
+    },
+    position: {
+      title: f.get('jobTitle'),
+      sapModule: f.get('sapModule'),
+      experienceYears: f.get('experience'),
+      employmentType: f.get('employmentType'),
+      workMode: f.get('workMode'),
+      openings: Number(f.get('openings') || 1),
+      budgetLpa: f.get('budget'),
+      targetStartDate: f.get('startDate'),
+      keySkills: f.get('skills')
+    },
+    candidate: f.get('candidateName') ? {
+      name: f.get('candidateName'),
+      email: f.get('candidateEmail'),
+      currentCompany: f.get('candidateCompany'),
+      noticePeriod: f.get('noticePeriod'),
+      notes: f.get('candidateNotes')
+    } : null,
+    officeLocation: {
+      detectedLocation: detectedLocation,     // raw GPS (may be null if manual entry)
+      confirmedLocation: confirmedLocation,   // final pin position (md section 17)
+      address: {
+        line1: f.get('addressLine1'),
+        line2: f.get('addressLine2'),
+        unitNumber: f.get('unitNumber'),
+        landmark: f.get('landmark'),
+        city: f.get('city'),
+        state: f.get('state'),
+        postalCode: f.get('postalCode'),
+        country: f.get('country')
+      }
+    }
+  };
+
+  // In production: POST /api/requisitions (md section 10 pattern).
+  // Here we persist locally and display the payload.
+  localStorage.setItem('sapHiringRequisition', JSON.stringify(payload));
+
+  const out = document.getElementById('output');
+  out.style.display = 'block';
+  out.textContent =
+    '✔ Requisition submitted and saved locally.\n\nPayload (would be POSTed to backend):\n\n' +
+    JSON.stringify(payload, null, 2);
+  out.scrollIntoView({ behavior: 'smooth' });
+});
+</script>
+
+</body>
+</html>
