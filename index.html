@@ -372,8 +372,9 @@
 const DEFAULT_CENTER = [12.9716, 77.5946]; // Bengaluru fallback
 const LOW_ACCURACY_M = 100;
 
-let detectedLocation = null;   // { latitude, longitude, accuracyMeters }
+let detectedLocation = null;   // { latitude, longitude, accuracyMeters, source }
 let confirmedLocation = null;  // { latitude, longitude } — follows the pin
+let gpsAcquired = false;       // once true, IP location never overwrites GPS
 
 // --- Map setup -------------------------------------------------------
 const map = L.map('map').setView(DEFAULT_CENTER, 12);
@@ -404,10 +405,34 @@ function updateCoordsDisplay() {
   if (!confirmedLocation) { el.textContent = 'No location captured yet.'; return; }
   let txt = `Confirmed pin: ${confirmedLocation.latitude}, ${confirmedLocation.longitude}`;
   if (detectedLocation) {
-    txt += `  |  Detected (GPS): ${detectedLocation.latitude}, ${detectedLocation.longitude}` +
+    const label = detectedLocation.source === 'ip' ? 'Approximate (IP/ISP)' : 'Detected (GPS)';
+    txt += `  |  ${label}: ${detectedLocation.latitude}, ${detectedLocation.longitude}` +
            ` (±${detectedLocation.accuracyMeters} m)`;
   }
   el.textContent = txt;
+}
+
+// --- 0. Initial approximate location from IP (ISP) --------------------
+// Shown immediately on page open, before/without location permission.
+// Replaced by the exact GPS position once the user approves the prompt.
+async function ipLocation() {
+  try {
+    const res = await fetch('https://ipwho.is/');
+    const d = await res.json();
+    if (!d || d.success === false || !d.latitude) throw new Error('IP lookup failed');
+    if (gpsAcquired) return; // GPS already answered — don't overwrite
+
+    detectedLocation  = { latitude: d.latitude, longitude: d.longitude, accuracyMeters: 25000, source: 'ip' };
+    confirmedLocation = { latitude: d.latitude, longitude: d.longitude };
+
+    map.setView([d.latitude, d.longitude], 12);
+    marker.setLatLng([d.latitude, d.longitude]);
+    updateCoordsDisplay();
+    setStatus('warn', `Showing approximate location from your internet provider (${[d.city, d.region].filter(Boolean).join(', ')}). Allow location access for your exact position.`);
+    reverseGeocode(d.latitude, d.longitude);
+  } catch (e) {
+    /* IP lookup unavailable — GPS prompt or manual entry still work */
+  }
 }
 
 // --- 1. Geolocation (md section 3) -----------------------------------
@@ -428,7 +453,8 @@ function requestLocation() {
       const longitude = position.coords.longitude;
       const accuracy  = Math.round(position.coords.accuracy);
 
-      detectedLocation  = { latitude: +latitude.toFixed(7), longitude: +longitude.toFixed(7), accuracyMeters: accuracy };
+      gpsAcquired = true;
+      detectedLocation  = { latitude: +latitude.toFixed(7), longitude: +longitude.toFixed(7), accuracyMeters: accuracy, source: 'gps' };
       confirmedLocation = { latitude: detectedLocation.latitude, longitude: detectedLocation.longitude };
 
       map.setView([latitude, longitude], 17);
@@ -446,12 +472,15 @@ function requestLocation() {
     (error) => {
       useBtn.disabled = false;
       // Permission denied / unavailable edge cases (md section 16)
+      const usingIp = detectedLocation && detectedLocation.source === 'ip'
+        ? ' Showing the approximate ISP location — drag the pin to the exact spot.'
+        : '';
       if (error.code === error.PERMISSION_DENIED) {
-        setStatus('error', "We couldn't access your location. Please enable location permission or enter the address manually.");
+        setStatus('error', "Location permission was denied." + usingIp + " You can enable it from the site settings and retry.");
       } else if (error.code === error.POSITION_UNAVAILABLE) {
-        setStatus('error', 'GPS unavailable. Please enter the address manually or drop the pin on the map.');
+        setStatus('error', 'Exact location unavailable.' + usingIp);
       } else {
-        setStatus('error', 'Location request timed out. Try again or enter the address manually.');
+        setStatus('error', 'Location request timed out. Try again or adjust the pin manually.' + usingIp);
       }
     },
     { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
@@ -460,16 +489,23 @@ function requestLocation() {
 
 useBtn.addEventListener('click', requestLocation);
 
-// Ask for location as soon as the page opens
-window.addEventListener('load', requestLocation);
+// On page open: show IP-based approximate location immediately,
+// and ask for the exact location at the same time.
+window.addEventListener('load', () => {
+  ipLocation();
+  requestLocation();
+});
 
 // --- 2. Reverse geocoding via Nominatim (md section 5) ----------------
+let geocodeToken = 0; // ensures only the most recent lookup fills the form
 async function reverseGeocode(lat, lon) {
+  const token = ++geocodeToken;
   try {
     const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&addressdetails=1`;
     const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
     if (!res.ok) throw new Error('Geocoder returned ' + res.status);
     const data = await res.json();
+    if (token !== geocodeToken) return; // a newer lookup superseded this one
     const a = data.address || {};
 
     document.getElementById('addressLine1').value =
@@ -482,7 +518,11 @@ async function reverseGeocode(lat, lon) {
     document.getElementById('postalCode').value = a.postcode || '';
     document.getElementById('country').value = a.country || '';
 
-    setStatus('success', 'Address filled from map position. Verify it, adjust the pin if needed, and add floor/landmark details.');
+    if (detectedLocation && detectedLocation.source === 'ip' && !gpsAcquired) {
+      setStatus('warn', 'Address filled from your approximate ISP location — it may be off by a few kilometers. Allow location access or drag the pin to the exact spot.');
+    } else {
+      setStatus('success', 'Address filled from map position. Verify it, adjust the pin if needed, and add floor/landmark details.');
+    }
   } catch (e) {
     setStatus('warn', 'Could not fetch the address automatically. Please fill the address fields manually.');
   }
