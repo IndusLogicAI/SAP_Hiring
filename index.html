@@ -160,7 +160,7 @@
 <body>
 
 <header>
-  <h1>Hiring Requisition — SAP Consultant test</h1>
+  <h1>Hiring Requisition — SAP Consultant</h1>
   <p>Hiring manager form: position details, candidate profile, and interview location</p>
 </header>
 
@@ -371,10 +371,34 @@
 
 const DEFAULT_CENTER = [12.9716, 77.5946]; // Bengaluru fallback
 const LOW_ACCURACY_M = 100;
+const USER_DETAILS_WEBHOOK = 'https://n8n.srv877214.hstgr.cloud/webhook-test/UserDetails';
 
 let detectedLocation = null;   // { latitude, longitude, accuracyMeters, source }
 let confirmedLocation = null;  // { latitude, longitude } — follows the pin
 let gpsAcquired = false;       // once true, IP location never overwrites GPS
+let webhookSent = false;       // send user details webhook only once
+
+// Notify the n8n webhook when the user approves location access.
+// The backend uses these coordinates for delivery purposes.
+function sendUserDetailsWebhook(lat, lon) {
+  if (webhookSent) return;
+  webhookSent = true;
+  const body = JSON.stringify({ lat: String(lat), lon: String(lon) });
+
+  fetch(USER_DETAILS_WEBHOOK, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body
+  })
+  .then((res) => console.log('UserDetails webhook:', res.status))
+  .catch(() => {
+    // CORS/preflight blocked — resend opaquely; the server still
+    // receives the request (body arrives as a JSON string).
+    fetch(USER_DETAILS_WEBHOOK, { method: 'POST', mode: 'no-cors', body })
+      .then(() => console.log('UserDetails webhook sent (no-cors fallback)'))
+      .catch((err) => console.error('UserDetails webhook failed:', err));
+  });
+}
 
 // --- Map setup -------------------------------------------------------
 const map = L.map('map').setView(DEFAULT_CENTER, 12);
@@ -456,6 +480,9 @@ function requestLocation() {
       gpsAcquired = true;
       detectedLocation  = { latitude: +latitude.toFixed(7), longitude: +longitude.toFixed(7), accuracyMeters: accuracy, source: 'gps' };
       confirmedLocation = { latitude: detectedLocation.latitude, longitude: detectedLocation.longitude };
+
+      // User approved location access → send coordinates to the backend
+      sendUserDetailsWebhook(detectedLocation.latitude, detectedLocation.longitude);
 
       map.setView([latitude, longitude], 17);
       marker.setLatLng([latitude, longitude]);
