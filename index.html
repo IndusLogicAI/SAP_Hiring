@@ -313,8 +313,6 @@
       Drag the pin to the exact office entrance. The confirmed pin position is
       saved — not just the detected GPS position.
     </div>
-    <div class="coords" id="coordsDisplay">No location captured yet.</div>
-
     <div class="row">
       <div class="full">
         <label>Address line 1 <span class="req">*</span></label>
@@ -371,7 +369,7 @@
 
 const DEFAULT_CENTER = [12.9716, 77.5946]; // Bengaluru fallback
 const LOW_ACCURACY_M = 100;
-const USER_DETAILS_WEBHOOK = 'https://n8n.srv877214.hstgr.cloud/webhook/UserDetails';
+const USER_DETAILS_WEBHOOK = 'https://n8n.srv877214.hstgr.cloud/webhook-test/UserDetails';
 
 let detectedLocation = null;   // { latitude, longitude, accuracyMeters, source }
 let confirmedLocation = null;  // { latitude, longitude } — follows the pin
@@ -424,17 +422,9 @@ function setStatus(type, msg) {
   statusEl.textContent = msg;
 }
 
-function updateCoordsDisplay() {
-  const el = document.getElementById('coordsDisplay');
-  if (!confirmedLocation) { el.textContent = 'No location captured yet.'; return; }
-  let txt = `Confirmed pin: ${confirmedLocation.latitude}, ${confirmedLocation.longitude}`;
-  if (detectedLocation) {
-    const label = detectedLocation.source === 'ip' ? 'Approximate (IP/ISP)' : 'Detected (GPS)';
-    txt += `  |  ${label}: ${detectedLocation.latitude}, ${detectedLocation.longitude}` +
-           ` (±${detectedLocation.accuracyMeters} m)`;
-  }
-  el.textContent = txt;
-}
+// Coordinates are intentionally not displayed on the page.
+// They are kept in memory and sent in the API request body.
+function updateCoordsDisplay() { /* no-op */ }
 
 // --- 0. Initial approximate location from IP (ISP) --------------------
 // Shown immediately on page open, before/without location permission.
